@@ -1,0 +1,343 @@
+<!DOCTYPE html>
+<html lang="pt-BR" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Controle Analítico da Estanhagem</title>
+
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+  <style>
+    :root{
+      --brand: #2463eb; --brand-2: #00C2FF;
+      --bg: #0b1020; --panel: rgba(255,255,255,0.08); --border: rgba(255,255,255,0.18);
+      --text: #e8ecf2; --muted: #9aa4b2;
+      --ok: #22c55e; --atrasado: #ef4444; --analise: #f59e0b; --alerta: #a855f7;
+      --shadow: 0 12px 50px rgba(0,0,0,0.35); --radius: 14px;
+    }
+    *{box-sizing:border-box}
+    html,body{height:100%;margin:0}
+    body{
+      font-family: Inter, Segoe UI, Arial, Helvetica, sans-serif;
+      background: radial-gradient(1200px 700px at 85% 10%, rgba(36,99,235,.15), transparent 70%),
+                  radial-gradient(900px 500px at 15% 90%, rgba(0,194,255,.14), transparent 65%),
+                  var(--bg);
+      color: var(--text);
+      overflow: hidden;
+    }
+
+    /* Cabeçalho com título central e DATA/HORA à direita */
+    header{
+      display:grid; grid-template-columns: 1fr auto; align-items:center;
+      height:12vh; min-height:70px; padding: 0 2.4vw;
+      background: linear-gradient(120deg, rgba(36,99,235,0.16), rgba(0,194,255,0.10));
+      border-bottom: 1px solid var(--border);
+    }
+    .header-title{
+      justify-self:center; text-align:center; font-weight:800; letter-spacing:.5px;
+      font-size: clamp(24px, 4vw, 48px);
+      background: linear-gradient(90deg, var(--brand), var(--brand-2));
+      -webkit-background-clip:text; background-clip:text; color:transparent;
+      text-shadow:0 4px 12px rgba(0,0,0,.25);
+    }
+    .header-info{
+      justify-self:end; display:flex; gap:1.6vw; align-items:center;
+      font-weight:700; color: var(--muted); font-variant-numeric: tabular-nums;
+      font-size: clamp(18px, 2.4vw, 30px);
+      background: rgba(255,255,255,0.06); border: 1px solid var(--border);
+      border-radius: 12px; padding: .8vh 1vw;
+    }
+    .header-info .label{
+      opacity:1; margin-right:.6vw;
+      font-size: clamp(18px, 2.4vw, 30px);
+      color: var(--muted);
+    }
+    .header-info .value{
+      color: var(--text); 
+      opacity:.95; 
+      font-size: clamp(18px, 2.4vw, 30px);
+    }
+
+    /* Área principal */
+    #app{height: 88vh; display:flex; align-items:stretch; justify-content:center;}
+    .screen{width:100%; height:100%; display:none; padding: 2.2vh 2.2vw; animation: fadeIn .6s ease;}
+    .screen.active{ display:flex; }
+    @keyframes fadeIn{from{opacity:0; transform:translateY(6px)} to{opacity:1; transform:none}}
+
+    .panel{
+      width:100%; height:100%; display:flex; flex-direction:column;
+      background: var(--panel); border: 1px solid var(--border);
+      border-radius: var(--radius); box-shadow: var(--shadow);
+      backdrop-filter: blur(10px) saturate(120%); -webkit-backdrop-filter: blur(10px) saturate(120%);
+      overflow: hidden;
+    }
+    .panel-header{
+      display:flex; align-items:center; justify-content:space-between;
+      padding: 1.2vh 1.5vw; border-bottom: 1px solid var(--border);
+      background: linear-gradient(90deg, rgba(255,255,255,0.06), rgba(255,255,255,0));
+    }
+    .panel-title{font-weight:700; font-size: clamp(16px, 2.2vw, 26px);}
+    .panel-sub{color: var(--muted); font-size: clamp(12px, 1.6vw, 16px);}
+
+    /* KPIs: ícone e número na mesma altura - TAMANHO REDUZIDO E INTEGRADO */
+    .kpis{display:flex; flex-wrap:wrap; gap:1.2vw; justify-content:center; padding: 2vh 1.5vw;}
+    .kpi{
+      flex: 0 1 220px; /* Redução do tamanho máximo do KPI */
+      background: linear-gradient(180deg, rgba(255,255,255,0.12), rgba(255,255,255,0.04));
+      border: 1px solid var(--border); border-radius: var(--radius);
+      padding: 1.6vh 1.6vw; position:relative; transition: transform .25s ease, box-shadow .25s ease;
+      display:grid; grid-template-columns: 48px 1fr; /* Icon column ajustado */ 
+      grid-template-rows: auto 1fr; align-items:center; column-gap: 1vw;
+    }
+    .kpi:hover{ transform: translateY(-3px); box-shadow: 0 10px 26px rgba(0,0,0,0.20); }
+    .kpi::after{content:""; position:absolute; inset:0; border-radius:inherit; box-shadow: inset 0 0 0 1px rgba(255,255,255,0.06); pointer-events:none;}
+    .kpi-label{grid-column: 1 / -1; font-weight:800; color: var(--muted); letter-spacing:.2px; font-size: clamp(12px, 1.6vw, 18px); /* Reduzido */ margin-bottom:.4vh;}
+    .icon{
+      grid-row: 2; grid-column: 1; width: 48px; height:48px; border-radius:12px; /* Reduzido */
+      display:flex; align-items:center; justify-content:center; font-size: 22px; /* Reduzido */ color: #fff;
+      background: linear-gradient(180deg, rgba(36,99,235,.22), rgba(0,194,255,.18)); box-shadow: inset 0 0 12px rgba(36,99,235,.28);
+    }
+    .value{grid-row: 2; grid-column: 2; font-weight:900; font-size: clamp(24px, 2.8vw, 36px); /* Reduzido */ line-height:1;}
+
+    /* Tabela */
+    .table-wrap{flex:1; display:flex; flex-direction:column; padding: 1.2vh 1.2vw; overflow:auto;} /* Habilita a rolagem para a tabela */
+    table{width:100%; border-collapse:collapse; font-size: clamp(14px, 1.6vw, 18px);}
+    thead th{background: linear-gradient(180deg, rgba(255,255,255,0.16), rgba(255,255,255,0.06)); padding: 1.2vh .8vw; text-align:center; border-bottom: 1px solid var(--border);}
+    tbody td{padding: 1.2vh .8vw; text-align:center; border-bottom: 1px solid rgba(255,255,255,0.06);}
+    tbody tr:nth-child(even){ background: rgba(255,255,255,0.04); }
+    .table-footer{margin-top:auto; text-align:center; color: var(--muted); padding-top: 1vh}
+    .tank-cell{display:flex; flex-direction:column; align-items:center; justify-content:center; line-height:1.1;}
+    .tank-name-top{ color: var(--muted); font-weight:700; font-size: clamp(12px,1.4vw,16px); }
+    .tank-id{ font-weight:800; font-size: clamp(18px,2.4vw,28px); }
+    
+    /* CORES DE STATUS */
+    .status-ok{color: var(--ok); font-weight: 700;}
+    .status-analise{color: var(--analise); font-weight: 700;}
+    .status-atrasado{color: var(--atrasado); font-weight: 700;}
+
+    /* Observações */
+    .obs-list{flex:1; display:grid; grid-template-columns: repeat(3, 1fr); gap: 1.2vw; padding: 1.2vh 1.2vw; overflow:auto;}
+    .obs-card{background: linear-gradient(180deg, rgba(255,255,255,0.12), rgba(255,255,255,0.05)); border: 1px solid var(--border); border-radius: var(--radius); padding: 1.6vh 1.4vw; box-shadow: var(--shadow);}
+    .obs-meta{ color: var(--muted); font-size: clamp(12px,1.4vw,16px); margin-bottom:.6vh }
+    .obs-card h4{ margin:.2vh 0 .6vh; font-size: clamp(16px,2vw,22px); }
+    .obs-desc{ color: var(--text); opacity:.92 }
+
+    /* Dots */
+    .dots{position:fixed; left:50%; transform:translateX(-50%); bottom: 1.6vh; display:flex; gap:.6vw; z-index:50;}
+    .dot{width:12px; height:12px; border-radius:50%; background: linear-gradient(180deg, #b9c2cf, #7e8a99); opacity:.45; border:1px solid rgba(255,255,255,.3);}
+    .dot.active{ background: linear-gradient(180deg, var(--brand), var(--brand-2)); opacity:1 }
+
+    /* Loader */
+    .loader{position:fixed; inset:0; z-index:100; background: linear-gradient(180deg, rgba(0,0,0,.35), rgba(0,0,0,.55)); display:flex; align-items:center; justify-content:center; flex-direction:column; gap: 1.6vh; color:#fff;}
+    .skeleton{width: 60%; max-width: 960px; height: 16px; border-radius: 10px; background: linear-gradient(90deg, rgba(255,255,255,.08) 0%, rgba(255,255,255,.18) 50%, rgba(255,255,255,.08) 100%); background-size: 200% 100%; animation: shimmer 1.2s infinite;}
+    @keyframes shimmer{ to{ background-position: 200% 0 } }
+
+    @media (max-width: 1100px){ .obs-list{ grid-template-columns: repeat(2,1fr); } }
+    @media (max-width: 780px){ .obs-list{ grid-template-columns: 1fr; } }
+  </style>
+</head>
+<body>
+  <script>
+    (function(){
+      const TARGET='https://cdn.jsdelivr.net/npm/chart.js';
+      const w=document.createTreeWalker(document.body,NodeFilter.SHOW_TEXT);const rm=[];
+      while(w.nextNode()){const n=w.currentNode;if(n.nodeValue&&n.nodeValue.trim()===TARGET){rm.push(n)}}
+      rm.forEach(n=>n.parentNode&&n.parentNode.removeChild(n));
+      document.querySelectorAll('body *').forEach(el=>{if(el.textContent&&el.textContent.includes(TARGET)){el.style.display='none'}});
+      const obs=new MutationObserver(muts=>muts.forEach(m=>{
+        m.addedNodes&&m.addedNodes.forEach(x=>{
+          if(x.nodeType===3&&x.nodeValue.trim()===TARGET){x.parentNode&&x.parentNode.removeChild(x)}
+          if(x.nodeType===1&&x.textContent.includes(TARGET)){x.style.display='none'}
+        });
+      }));
+      obs.observe(document.body,{childList:true,subtree:true,characterData:true});
+    })();
+  </script>
+
+  <header>
+    <div class="header-title">Controle Analítico da Estanhagem</div>
+    <div class="header-info" aria-label="Data e Hora">
+      <div><span class="label">DATA:</span> <span class="value" id="dateValue">--/--/----</span></div>
+      <div><span class="label">HORA:</span> <span class="value" id="timeValue">--:--</span></div>
+    </div>
+  </header>
+
+  <main id="app" aria-live="polite"></main>
+
+  <div class="dots" id="dots" aria-label="Navegação de telas"></div>
+
+  <div class="loader" id="loader" role="status" aria-label="Carregando">
+    <div class="skeleton"></div>
+    <div class="skeleton" style="width:40%"></div>
+    <div class="skeleton" style="width:55%"></div>
+    <div style="opacity:.9">Carregando dados…</div>
+  </div>
+
+  <script>
+    /* DATA e HORA */
+    function tickClock(){
+      const d = new Date(), pad = n => String(n).padStart(2,'0');
+      document.getElementById('dateValue').textContent = `${pad(d.getDate())}/${pad(d.getMonth()+1)}/${d.getFullYear()}`;
+      document.getElementById('timeValue').textContent = `${pad(d.getHours())}:${pad(d.getMinutes())}`;
+    }
+    setInterval(tickClock, 1000); tickClock();
+
+    /* Estado / rotação */
+    let telas=[], idx=0, timer=null;
+
+    function criarTela(id, titulo, sub=""){
+      const s = document.createElement('section'); s.className = 'screen'; s.id = id;
+      const p = document.createElement('div'); p.className = 'panel';
+      const h = document.createElement('div'); h.className = 'panel-header';
+      h.innerHTML = `<div class="panel-title">${titulo}</div><div class="panel-sub">${sub}</div>`;
+      p.appendChild(h); s.appendChild(p); return s;
+    }
+    function montarDots(){
+      const d = document.getElementById('dots'); d.innerHTML = '';
+      telas.forEach((_,i)=>{ const dot=document.createElement('div'); dot.className='dot'+(i===idx?' active':''); d.appendChild(dot); });
+    }
+    function mostrarTela(i){ telas.forEach((t,ix)=> t.classList.toggle('active', ix===i)); idx = i; montarDots(); }
+    function iniciarRotacao(){
+      mostrarTela(0);
+      if(timer) clearInterval(timer);
+      timer = setInterval(()=>{ const prox = (idx + 1) % telas.length; mostrarTela(prox); }, 20000); // ← TEMPO AUMENTADO PARA 20 SEGUNDOS
+    }
+    function limpar(){ document.getElementById('app').innerHTML=''; document.getElementById('dots').innerHTML=''; telas=[]; idx=0; if(timer) clearInterval(timer); }
+
+    /* Telas */
+    
+    // NOVA TELA: Combina KPIs (Reduzidos e Movidos) e Tabela (Página Única)
+    function criarTelaDetalhamento(d){
+      const list = d.tanques ?? [];
+      // Novo título para a tela combinada
+      const s = criarTela('t-detalhes','Detalhamento por Tanque e Indicadores','Visão completa do processo'); 
+      const panel = s.querySelector('.panel');
+
+      // 1. KPIs (Conteúdo da antiga telaKPIs, agora como primeira seção do painel)
+      const kpiWrap = document.createElement('div'); 
+      kpiWrap.className = 'kpis';
+      kpiWrap.innerHTML = `
+        <div class="kpi"><div class="kpi-label">Total</div><div class="icon">📊</div><div class="value">${d.total ?? '-'}</div></div>
+        <div class="kpi"><div class="kpi-label">OK</div><div class="icon" style="background:linear-gradient(180deg, rgba(34,197,94,.25), rgba(34,197,94,.18))">✅</div><div class="value" style="color:var(--ok)">${d.ok ?? '-'}</div></div>
+        <div class="kpi"><div class="kpi-label">Atrasado</div><div class="icon" style="background:linear-gradient(180deg, rgba(239,68,68,.25), rgba(239,68,68,.18))">⏱️</div><div class="value" style="color:var(--atrasado)">${d.atrasado ?? '-'}</div></div>
+        <div class="kpi"><div class="kpi-label">Em Análise</div><div class="icon" style="background:linear-gradient(180deg, rgba(245,158,11,.25), rgba(245,158,11,.18))">🔎</div><div class="value" style="color:var(--analise)">${d.analise ?? '-'}</div></div>
+        <div class="kpi"><div class="kpi-label">Alertas</div><div class="icon" style="background:linear-gradient(180deg, rgba(168,85,247,.25), rgba(168,85,247,.18))">⚠️</div><div class="value" style="color:var(--alerta)">${d.alertas ?? '-'}</div></div>
+      `;
+      panel.appendChild(kpiWrap);
+
+      // 2. Tabela (Conteúdo da antiga telasTabela - Sem paginação)
+      const wrap = document.createElement('div'); wrap.className='table-wrap';
+      wrap.innerHTML = `
+        <table aria-label="Tabela de tanques">
+          <thead><tr><th>Tanque</th><th>Última Análise</th><th>Próxima</th><th>Status</th></tr></thead>
+          <tbody></tbody>
+        </table>
+        `;
+      panel.appendChild(wrap);
+
+      const tbody = wrap.querySelector('tbody');
+      // Itera sobre *todos* os tanques (Página Única)
+      list.forEach(t=>{
+          const nomeTop = t.nomeTopo || t.alias || t.setor || t.nome || '';
+          const base = t.nome || '';
+          
+          let statusClass = '';
+          if(t.status === 'OK'){
+            statusClass = 'status-ok';
+          } else if(t.status === 'Em Análise'){
+            statusClass = 'status-analise';
+          } else if(t.status === 'Atrasado'){
+            statusClass = 'status-atrasado';
+          }
+
+          const tr = document.createElement('tr');
+          tr.innerHTML = `
+            <td>
+              <div class="tank-cell">
+                <div class="tank-name-top">${nomeTop}</div>
+                <div class="tank-id">${base}</div>
+              </div>
+            </td>
+            <td>${t.ultima ?? '-'}</td>
+            <td>${t.proxima ?? '-'}</td>
+            <td class="${statusClass}">${t.status ?? '-'}</td>
+          `;
+          tbody.appendChild(tr);
+      });
+      return s;
+    }
+
+    function telaObservacoes(d){
+      const obs = d.observacoes ?? []; if(!obs.length) return null;
+      const s = criarTela('t-obs','Observações Recentes','Eventos e anotações importantes');
+      const panel = s.querySelector('.panel');
+      const list = document.createElement('div'); list.className='obs-list';
+      obs.forEach(o=>{
+        const card = document.createElement('div'); card.className='obs-card';
+        card.innerHTML = `
+          <div class="obs-meta">${o.data ?? '-'} • ${o.setor ?? '-'}</div>
+          <h4>${o.responsavel ?? '-'}</h4>
+          <div class="obs-desc">${o.descricao ?? '-'}</div>
+        `;
+        list.appendChild(card);
+      });
+      panel.appendChild(list); return s;
+    }
+
+    async function montar(d){
+      limpar();
+      const app = document.getElementById('app');
+
+      // Modificado: Apenas a tela combinada e Observações
+      const tDetalhe = criarTelaDetalhamento(d);
+      const tObs = telaObservacoes(d);
+
+      [tDetalhe, tObs].forEach(t=>{ if(t){ app.appendChild(t); telas.push(t); } });
+      montarDots();
+      if(telas.length) iniciarRotacao();
+    }
+
+    async function carregar(){
+      const loader = document.getElementById('loader'); loader.style.display='flex';
+      try{
+        const base = window.location.origin;
+        const url = new URL('status.json', base);
+        const resp = await fetch(url, { cache:'no-cache' });
+        if(!resp.ok) throw new Error('HTTP '+resp.status);
+        const dados = await resp.json();
+        await montar(dados);
+      }catch(e){
+        console.warn('Falha ao carregar JSON. Usando fallback.', e);
+        const demo = {
+          "total": 6, "ok": 3, "atrasado": 2, "analise": 1, "alertas": 0,
+          "tanques":[
+            {"nomeTopo":"Desengraxante","nome":"Tanque 01","ultima":"25/11/2025","proxima":"26/11/2025","status":"OK","valor":95},
+            {"nomeTopo":"Ativação","nome":"Tanque 02","ultima":"25/11/2025","proxima":"27/11/2025","status":"Em Análise","valor":70},
+            {"nomeTopo":"Níquel WATT","nome":"Tanque 03","ultima":"24/11/2025","proxima":"26/11/2025","status":"Atrasado","valor":55},
+            {"nomeTopo":"Estanhagem A","nome":"Tanque 04","ultima":"24/11/2025","proxima":"30/11/2025","status":"OK","valor":88},
+            {"nomeTopo":"Estanhagem B","nome":"Tanque 05","ultima":"23/11/2025","proxima":"27/11/2025","status":"OK","valor":91},
+            {"nomeTopo":"Selante","nome":"Tanque 06","ultima":"22/11/2025","proxima":"26/11/2025","status":"OK","valor":86}
+          ],
+          "observacoes":[
+            {"data":"07/11/2025","setor":"Desengraxante","responsavel":"Luiz","descricao":"Troca do banho • Selante 2 (Tanque 16)"},
+            {"data":"18/11/2025","setor":"Níquel WATT","responsavel":"Elineu","descricao":"Calibração do sensor de temperatura"}
+          ]
+        };
+        await montar(demo);
+      }finally{
+        loader.style.display='none';
+      }
+    }
+
+    setInterval(carregar, 300000);
+    carregar();
+
+    // Navegação manual (opcional)
+    document.addEventListener('keydown', (ev)=>{
+      if(!telas.length) return;
+      if(ev.key === 'ArrowRight'){ mostrarTela((idx+1)%telas.length); }
+      else if(ev.key === 'ArrowLeft'){ mostrarTela((idx-1+telas.length)%telas.length); }
+    });
+  </script>
+</body>
+</html>

@@ -1,0 +1,14 @@
+
+{
+  "name": "seu-site",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "",
+    "dev": "netlify dev"
+  },
+  "dependencies": {
+    "@netlify/blobs": "^6.3.0"
+  }
+}
